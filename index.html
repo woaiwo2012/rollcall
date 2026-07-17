@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>随机点名器 · 公平抽取</title>
+<style>
+  :root{
+    --bg1:#1e1b4b; --bg2:#312e81; --accent:#818cf8; --accent2:#f472b6;
+    --card:rgba(255,255,255,.06); --card-border:rgba(255,255,255,.12);
+    --text:#e9e9ff; --muted:#a5a5c9; --good:#34d399; --warn:#fbbf24; --bad:#f87171;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    color:var(--text);min-height:100vh;
+    background:radial-gradient(1200px 600px at 80% -10%,#4c1d95 0%,transparent 60%),
+               radial-gradient(900px 500px at 0% 110%,#831843 0%,transparent 55%),
+               linear-gradient(135deg,var(--bg1),var(--bg2));
+    padding:22px;
+  }
+  h1{font-size:22px;letter-spacing:1px;display:flex;align-items:center;gap:10px}
+  h1 .dot{width:12px;height:12px;border-radius:50%;background:var(--accent2);box-shadow:0 0 16px var(--accent2)}
+  .wrap{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:340px 1fr;gap:18px}
+  .card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:16px;backdrop-filter:blur(8px)}
+  .card h2{font-size:14px;color:var(--muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;font-weight:600}
+  input,button,select{font-family:inherit;color:var(--text);border-radius:10px}
+  input[type=text],select{
+    background:rgba(0,0,0,.25);border:1px solid var(--card-border);padding:10px 12px;width:100%;outline:none;font-size:14px;
+  }
+  input[type=text]:focus,select:focus{border-color:var(--accent)}
+  button{cursor:pointer;border:none;padding:9px 14px;font-size:14px;font-weight:600;transition:.15s;background:rgba(255,255,255,.1)}
+  button:hover{filter:brightness(1.15)}
+  button.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+  button.ghost{background:transparent;border:1px solid var(--card-border)}
+  button.danger{background:rgba(248,113,113,.15);color:var(--bad);border:1px solid rgba(248,113,113,.4)}
+  .row{display:flex;gap:8px}
+  .row > *{flex:1}
+  .group-list{display:flex;flex-direction:column;gap:6px;margin-top:10px;max-height:220px;overflow:auto}
+  .group-item{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:10px;background:rgba(0,0,0,.18);border:1px solid transparent;cursor:pointer}
+  .group-item.active{border-color:var(--accent);background:rgba(129,140,248,.18)}
+  .group-item .gname{flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .group-item .cnt{font-size:12px;color:var(--muted);background:rgba(0,0,0,.3);padding:2px 8px;border-radius:20px}
+  .group-item .x{color:var(--muted);font-size:13px;padding:0 4px}
+  .group-item .x:hover{color:var(--bad)}
+  .member-list{margin-top:10px;display:flex;flex-wrap:wrap;gap:7px;max-height:230px;overflow:auto}
+  .chip{display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.22);border:1px solid var(--card-border);padding:6px 8px 6px 12px;border-radius:20px;font-size:13px}
+  .chip .x{cursor:pointer;color:var(--muted);font-size:14px;line-height:1}
+  .chip .x:hover{color:var(--bad)}
+  .empty{color:var(--muted);font-size:13px;padding:14px 0;text-align:center}
+  .stage{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;text-align:center}
+  .pickbox{font-size:64px;font-weight:800;letter-spacing:2px;min-height:78px;line-height:1.1;
+    background:linear-gradient(135deg,#fff,#c7d2fe);-webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 0 40px rgba(129,140,248,.35)}
+  .pickbox.rolling{animation:shake .12s infinite}
+  @keyframes shake{0%{transform:translateX(-2px)}50%{transform:translateX(2px)}100%{transform:translateX(-2px)}}
+  .sub{color:var(--muted);margin-top:6px;font-size:14px;min-height:20px}
+  .stats{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;justify-content:center}
+  .stat{background:rgba(0,0,0,.22);border:1px solid var(--card-border);border-radius:12px;padding:10px 16px;text-align:center;min-width:90px}
+  .stat .n{font-size:22px;font-weight:700}
+  .stat .l{font-size:12px;color:var(--muted);margin-top:2px}
+  .controls{display:flex;flex-direction:column;gap:12px;margin-top:16px}
+  .seg{display:flex;gap:0;border:1px solid var(--card-border);border-radius:10px;overflow:hidden;background:rgba(0,0,0,.2)}
+  .seg button{flex:1;border-radius:0;background:transparent;color:var(--muted)}
+  .seg button.on{background:rgba(129,140,248,.25);color:#fff}
+  .toggle{display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,.18);border:1px solid var(--card-border);padding:10px 14px;border-radius:10px;font-size:14px}
+  .switch{position:relative;width:46px;height:24px;background:rgba(255,255,255,.15);border-radius:20px;cursor:pointer;transition:.2s;flex:0 0 auto}
+  .switch.on{background:var(--good)}
+  .switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:.2s}
+  .switch.on::after{left:25px}
+  .bigbtn{font-size:18px;padding:16px;border-radius:14px;width:100%}
+  .history{margin-top:16px}
+  .hist-list{max-height:200px;overflow:auto;display:flex;flex-direction:column;gap:5px;margin-top:8px}
+  .hist-item{display:flex;justify-content:space-between;font-size:13px;padding:7px 10px;background:rgba(0,0,0,.16);border-radius:8px}
+  .hist-item .who{font-weight:600}
+  .hist-item .grp{color:var(--muted);font-size:12px}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .footer{margin-top:14px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+  @media(max-width:880px){.wrap{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- 左侧：分组与名单管理 -->
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <div class="card">
+      <h2>小组管理</h2>
+      <div class="row">
+        <input type="text" id="newGroup" placeholder="输入小组名，如：第一组">
+        <button class="primary" id="addGroup" style="flex:0 0 80px">+ 新建</button>
+      </div>
+      <div class="group-list" id="groupList"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="memberTitle">成员名单</h2>
+      <div class="row">
+        <input type="text" id="newName" placeholder="输入姓名后回车添加">
+        <button class="primary" id="addName" style="flex:0 0 80px">+ 添加</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="danger" id="clearGroup" style="flex:1">清空本组</button>
+      </div>
+      <div class="member-list" id="memberList"></div>
+    </div>
+
+    <div class="card">
+      <h2>数据</h2>
+      <div class="hint">所有数据自动保存在本浏览器。可导出备份或导入恢复。</div>
+      <div class="footer" style="margin-top:10px">
+        <button class="ghost" id="exportBtn">导出备份</button>
+        <button class="ghost" id="importBtn">导入备份</button>
+        <button class="danger" id="resetAll">清空全部</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json" style="display:none">
+    </div>
+  </div>
+
+  <!-- 右侧：抽取主舞台 -->
+  <div class="card">
+    <h1 style="margin-bottom:14px"><span class="dot"></span>随机点名器</h1>
+
+    <div class="stage">
+      <div class="pickbox" id="pickbox">准备就绪</div>
+      <div class="sub" id="subhint">点击下方按钮开始公平抽取</div>
+      <div class="stats">
+        <div class="stat"><div class="n" id="stTotal">0</div><div class="l">总人数</div></div>
+        <div class="stat"><div class="n" id="stPicked">0</div><div class="l">本轮已抽</div></div>
+        <div class="stat"><div class="n" id="stLeft">0</div><div class="l">剩余未抽</div></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div>
+        <div class="hint" style="margin-bottom:6px">抽取范围</div>
+        <div class="seg" id="scopeSeg">
+          <button data-scope="group" class="on">当前小组</button>
+          <button data-scope="all">全部小组</button>
+        </div>
+      </div>
+
+      <div class="toggle">
+        <div>
+          <div>不放回抽取（保证公平）</div>
+          <div class="hint" style="margin-top:2px">开启后：抽完一轮才重洗，一人不会被连抽、也不会有人一直轮不到。</div>
+        </div>
+        <div class="switch on" id="noReplace"></div>
+      </div>
+
+      <button class="primary bigbtn" id="pickBtn">🎲 开始抽取</button>
+
+      <div class="row">
+        <button class="ghost" id="resetRound">重置本轮</button>
+        <button class="ghost" id="undoBtn">撤销上一次</button>
+      </div>
+    </div>
+
+    <div class="history">
+      <h2>抽取记录</h2>
+      <div class="hist-list" id="histList"><div class="empty">还没有抽取记录</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ 数据层 ============ */
+const KEY = 'rollcall.v2';
+const DEFAULT_STATE = {"groups": [{"id": "g1", "name": "第1组", "members": [{"id": "g1m1", "name": "王伟皓"}, {"id": "g1m2", "name": "董浩桢"}, {"id": "g1m3", "name": "张嘉睿"}]}, {"id": "g2", "name": "第2组", "members": [{"id": "g2m1", "name": "杨浩宇"}, {"id": "g2m2", "name": "王祖涵"}, {"id": "g2m3", "name": "马敬杰"}]}, {"id": "g3", "name": "第3组", "members": [{"id": "g3m1", "name": "鲁佳宁"}, {"id": "g3m2", "name": "林昱衡"}, {"id": "g3m3", "name": "赵健华"}]}, {"id": "g4", "name": "第4组", "members": [{"id": "g4m1", "name": "余昕颖"}, {"id": "g4m2", "name": "杨谨硕"}, {"id": "g4m3", "name": "胡靖坤"}]}, {"id": "g5", "name": "第5组", "members": [{"id": "g5m1", "name": "雷添越"}, {"id": "g5m2", "name": "王吉锟"}, {"id": "g5m3", "name": "黄维佳"}]}, {"id": "g6", "name": "第6组", "members": [{"id": "g6m1", "name": "韩童语"}, {"id": "g6m2", "name": "吕松霖"}, {"id": "g6m3", "name": "徐正源"}]}, {"id": "g7", "name": "第7组", "members": [{"id": "g7m1", "name": "刘一锘"}, {"id": "g7m2", "name": "安韩睿"}, {"id": "g7m3", "name": "于嫆萱"}]}, {"id": "g8", "name": "第8组", "members": [{"id": "g8m1", "name": "李易恒"}, {"id": "g8m2", "name": "吴明轩"}, {"id": "g8m3", "name": "马福远"}]}, {"id": "g9", "name": "第9组", "members": [{"id": "g9m1", "name": "余勇诺"}, {"id": "g9m2", "name": "孙培清"}, {"id": "g9m3", "name": "张景源"}, {"id": "g9m4", "name": "法博睿"}]}, {"id": "g10", "name": "第10组", "members": [{"id": "g10m1", "name": "潘守望"}, {"id": "g10m2", "name": "朱少华"}, {"id": "g10m3", "name": "潘子晨"}, {"id": "g10m4", "name": "王浩睿"}, {"id": "g10m5", "name": "王楚婷"}]}], "currentGroupId": "g1", "history": [], "scope": "group", "noReplace": true, "bag": []};
+let state = load();
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function load(){
+  try{
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if(s && Array.isArray(s.groups)) return s;
+  }catch(e){}
+  return DEFAULT_STATE;
+}
+function save(){ localStorage.setItem(KEY, JSON.stringify(state)); refresh(); }
+
+function currentGroup(){
+  let g = state.groups.find(g=>g.id===state.currentGroupId);
+  if(!g && state.groups[0]){ g = state.groups[0]; state.currentGroupId = g.id; }
+  return g;
+}
+/* 当前抽取池：[{name, groupName}] */
+function getPool(){
+  if(state.scope==='all'){
+    return state.groups.flatMap(g=>g.members.map(m=>({name:m.name, groupName:g.name})));
+  }
+  const g = currentGroup();
+  return g ? g.members.map(m=>({name:m.name, groupName:g.name})) : [];
+}
+
+/* ============ 公平随机核心 ============ */
+/* 密码学安全随机整数 [0, n) */
+function randInt(n){
+  if(n<=0) return 0;
+  if(window.crypto && crypto.getRandomValues){
+    // 拒绝采样，避免取模偏差
+    const max = Math.floor(0xFFFFFFFF / n) * n;
+    const buf = new Uint32Array(1);
+    let x;
+    do { crypto.getRandomValues(buf); x = buf[0]; } while(x >= max);
+    return x % n;
+  }
+  return Math.floor(Math.random()*n);
+}
+/* Fisher-Yates 洗牌（使用密码学随机） */
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = randInt(i+1);
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+/* 取抽取池快照的 key，用于判断范围改变需重洗 */
+function poolKey(){
+  const p = getPool();
+  return state.scope + '|' + p.map(x=>x.groupName+':'+x.name).join(',');
+}
+function ensureBag(){
+  const key = poolKey();
+  if(state._bagKey !== key || !state.bag || state.bag.length===0){
+    state.bag = shuffle(getPool());
+    state._bagKey = key;
+  }
+}
+function drawOne(){
+  const pool = getPool();
+  if(pool.length===0) return null;
+  if(state.noReplace){
+    ensureBag();
+    if(state.bag.length===0){ state.bag = shuffle(getPool()); state._bagKey = poolKey(); }
+    return state.bag.pop();
+  } else {
+    return pool[randInt(pool.length)];
+  }
+}
+
+/* ============ 抽取动作 ============ */
+let rolling = false;
+const pickbox = document.getElementById('pickbox');
+const subhint = document.getElementById('subhint');
+
+document.getElementById('pickBtn').onclick = ()=>{
+  const pool = getPool();
+  if(pool.length===0){ subhint.textContent = state.scope==='all'?'请先添加成员':'请先在当前小组添加成员'; return; }
+  if(rolling) return;
+  rolling = true;
+  const chosen = drawOne();
+  // 滚动动画
+  pickbox.classList.add('rolling');
+  let ticks = 0; const total = 22 + randInt(10);
+  const timer = setInterval(()=>{
+    pickbox.textContent = pool[randInt(pool.length)].name;
+    ticks++;
+    if(ticks>=total){
+      clearInterval(timer);
+      pickbox.classList.remove('rolling');
+      pickbox.textContent = chosen.name;
+      subhint.textContent = '来自：' + chosen.groupName;
+      // 记录
+      state.history.unshift({name:chosen.name, group:chosen.groupName, t:Date.now()});
+      if(state.history.length>200) state.history.length=200;
+      save();
+      rolling = false;
+    }
+  }, 70);
+};
+
+document.getElementById('resetRound').onclick = ()=>{
+  state.bag = []; state._bagKey = null;
+  pickbox.textContent = '';
+  subhint.textContent = '本轮已重置，重新洗牌';
+  save();
+};
+document.getElementById('undoBtn').onclick = ()=>{
+  if(state.history.length===0) return;
+  const last = state.history.shift();
+  // 把撤销的人放回袋尾（保持公平：本轮还有机会再被抽）
+  if(state.noReplace){
+    ensureBag();
+    state.bag.push({name:last.name, groupName:last.group});
+  }
+  subhint.textContent = '已撤销：' + last.name;
+  save();
+};
+
+/* ============ 范围切换 ============ */
+document.querySelectorAll('#scopeSeg button').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('#scopeSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    state.scope = b.dataset.scope;
+    state.bag=[]; state._bagKey=null; // 范围变了，重洗
+    save();
+  };
+});
+/* 不放回开关 */
+const sw = document.getElementById('noReplace');
+sw.onclick = ()=>{
+  state.noReplace = !state.noReplace;
+  sw.classList.toggle('on', state.noReplace);
+  state.bag=[]; state._bagKey=null;
+  save();
+};
+
+/* ============ 分组管理 ============ */
+document.getElementById('addGroup').onclick = ()=>{
+  const inp = document.getElementById('newGroup');
+  const name = inp.value.trim();
+  if(!name) return;
+  const g = {id:uid(), name, members:[]};
+  state.groups.push(g);
+  state.currentGroupId = g.id;
+  inp.value='';
+  save();
+};
+document.getElementById('groupList').onclick = (e)=>{
+  const item = e.target.closest('.group-item'); if(!item) return;
+  const id = item.dataset.id;
+  if(e.target.classList.contains('x')){
+    if(state.groups.length<=1){ alert('至少保留一个小组'); return; }
+    if(!confirm('删除该小组及其所有成员？')) return;
+    state.groups = state.groups.filter(g=>g.id!==id);
+    if(state.currentGroupId===id) state.currentGroupId = state.groups[0].id;
+    save(); return;
+  }
+  state.currentGroupId = id; state.bag=[]; state._bagKey=null; save();
+};
+document.getElementById('groupList').ondblclick = (e)=>{
+  const item = e.target.closest('.group-item'); if(!item) return;
+  const g = state.groups.find(x=>x.id===item.dataset.id);
+  const nv = prompt('修改小组名', g.name);
+  if(nv && nv.trim()){ g.name = nv.trim(); save(); }
+};
+
+/* ============ 成员管理 ============ */
+function addNames(arr){
+  const g = currentGroup(); if(!g) return;
+  let added=0;
+  arr.map(s=>s.trim()).filter(Boolean).forEach(nm=>{
+    if(!g.members.some(m=>m.name===nm)){ g.members.push({id:uid(),name:nm}); added++; }
+  });
+  if(added){ state.bag=[]; state._bagKey=null; save(); }
+  return added;
+}
+document.getElementById('addName').onclick = ()=>{
+  const inp = document.getElementById('newName');
+  const n = addNames([inp.value]);
+  if(n) inp.value='';
+};
+document.getElementById('newName').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('addName').click(); });
+
+document.getElementById('memberList').onclick = (e)=>{
+  if(!e.target.classList.contains('x')) return;
+  const g = currentGroup();
+  const mid = e.target.closest('.chip').dataset.id;
+  g.members = g.members.filter(m=>m.id!==mid);
+  state.bag=[]; state._bagKey=null; save();
+};
+document.getElementById('clearGroup').onclick = ()=>{
+  const g = currentGroup(); if(!g) return;
+  if(g.members.length && !confirm('清空「'+g.name+'」的所有成员？')) return;
+  g.members = []; state.bag=[]; state._bagKey=null; save();
+};
+
+
+
+/* ============ 备份 ============ */
+document.getElementById('exportBtn').onclick = ()=>{
+  const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '点名器备份_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+};
+document.getElementById('importBtn').onclick = ()=>document.getElementById('importFile').click();
+document.getElementById('importFile').onchange = (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const s = JSON.parse(r.result);
+      if(!s.groups) throw 0;
+      state = Object.assign(load(), s); state.bag=[]; state._bagKey=null;
+      save(); alert('导入成功');
+    }catch(err){ alert('文件格式不正确'); }
+  };
+  r.readAsText(f);
+  e.target.value='';
+};
+document.getElementById('resetAll').onclick = ()=>{
+  if(!confirm('将清空所有小组、成员和记录，确定？')) return;
+  state = { groups:[{id:uid(),name:'第一组',members:[]}], currentGroupId:null, history:[], scope:'group', noReplace:true, bag:[] };
+  save();
+};
+
+/* ============ 渲染 ============ */
+function refresh(){
+  localStorage.setItem(KEY, JSON.stringify(state)); // 兜底保存
+  // 分组列表
+  const gl = document.getElementById('groupList');
+  gl.innerHTML = state.groups.map(g=>`
+    <div class="group-item ${g.id===state.currentGroupId?'active':''}" data-id="${g.id}">
+      <span class="gname">${esc(g.name)}</span>
+      <span class="cnt">${g.members.length}</span>
+      <span class="x" title="删除">✕</span>
+    </div>`).join('');
+  const g = currentGroup();
+  document.getElementById('memberTitle').textContent = '成员名单 · ' + (g?g.name:'未选择');
+  // 成员
+  const ml = document.getElementById('memberList');
+  if(g && g.members.length){
+    ml.innerHTML = g.members.map(m=>`<div class="chip" data-id="${m.id}">${esc(m.name)}<span class="x" title="删除">✕</span></div>`).join('');
+  } else {
+    ml.innerHTML = '<div class="empty">该小组暂无成员，用上方输入框添加吧</div>';
+  }
+  // 统计
+  const pool = getPool();
+  const total = pool.length;
+  document.getElementById('stTotal').textContent = total;
+  if(state.noReplace){
+    ensureBagSilent();
+    document.getElementById('stPicked').textContent = total - state.bag.length;
+    document.getElementById('stLeft').textContent = state.bag.length;
+  } else {
+    document.getElementById('stPicked').textContent = state.history.length;
+    document.getElementById('stLeft').textContent = '∞';
+  }
+  // 历史
+  const hl = document.getElementById('histList');
+  if(state.history.length){
+    hl.innerHTML = state.history.map(h=>{
+      const d = new Date(h.t);
+      const t = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+      return `<div class="hist-item"><span class="who">${esc(h.name)} <span class="grp">· ${esc(h.group)}</span></span><span class="grp">${t}</span></div>`;
+    }).join('');
+  } else hl.innerHTML = '<div class="empty">还没有抽取记录</div>';
+  // 同步开关显示
+  document.getElementById('noReplace').classList.toggle('on', state.noReplace);
+  // 范围高亮
+  document.querySelectorAll('#scopeSeg button').forEach(b=>b.classList.toggle('on', b.dataset.scope===state.scope));
+}
+function ensureBagSilent(){ if(state.noReplace) ensureBag(); }
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+refresh();
+</script>
+</body>
+</html>
